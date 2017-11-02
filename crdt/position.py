@@ -1,10 +1,10 @@
-from typing import Sequence
+from typing import List
 
 
 class Position:
     BASE_BITS = 5
 
-    def __init__(self, pos: Sequence[int]=None):
+    def __init__(self, pos: List[int]=None) -> None:
         self.pos = pos or []  # Holds tree path as variable base digits of size 2^(BASE_BITS + el. no)
 
     def to_int(self, trim: int=0) -> int:
@@ -33,8 +33,8 @@ class Position:
     @classmethod
     def from_int(cls, i: int, depth: int) -> "Position":
         new_pos = cls()
-
         tmp = i
+
         for d in range(depth, 0, -1):
             shift = cls.BASE_BITS + d - 1
             # Extract n rightmost bits where n equals the no. of bits at depth `d`

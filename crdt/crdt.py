@@ -2,28 +2,30 @@ import json
 import pickle
 
 from sortedcontainers import SortedList
-from random import randint
+from random import randint, getrandbits
+from typing import Dict, Sequence
 
 from .char import Char
 from .position import Position
 
 
 class CRDTDoc:
+    BASE_BITS = 5
+    BOUNDARY = 5
 
-    def __init__(self, site=0):
-        self._clock = 0
+    def __init__(self, site: int=0) -> None:
+        self._clock: int = 0
+        self._used_strategies: Dict[int, bool] = {}
 
-        self.site = site
+        self.site: int = site
 
-        self._doc = SortedList()
+        self._doc: SortedList["Char"] = SortedList()
         self._doc.add(Char("", Position([0]), -1, self._clock))
-        self._doc.add(Char("", Position([2 ** 5 - 1]), -1, self._clock))
+        self._doc.add(Char("", Position([2 ** self.BASE_BITS - 1]), -1, self._clock))
 
     def insert(self, pos: int, char: str) -> str:
         self._clock += 1
-
         p, q = self._doc[pos].pos, self._doc[pos + 1].pos
-
         new_char = Char(char, self._alloc(p, q), self.site, self._clock)
         self._doc.add(new_char)
 
@@ -31,9 +33,7 @@ class CRDTDoc:
 
     def delete(self, pos: int) -> str:
         self._clock += 1
-
         old_char = self._doc[pos + 1]
-
         self._doc.remove(old_char)
 
         return self._serialize("d", old_char)
@@ -45,9 +45,15 @@ class CRDTDoc:
             depth += 1
             interval = p.interval_between(q, depth)
 
-        # Maximum distance should be 5 (arbitrary constant)
-        step = min(5, randint(0, interval - 1) + 1)
-        res = p.to_int(depth) + step
+        step = min(self.BOUNDARY, randint(0, interval - 1) + 1)
+
+        if depth not in self._used_strategies:
+            self._used_strategies[depth] = bool(getrandbits(1))
+
+        if self._used_strategies[depth]:
+            res = p.to_int(depth) + step
+        else:
+            res = q.to_int(depth) - step
 
         return Position.from_int(res, depth)
 

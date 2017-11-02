@@ -1,6 +1,9 @@
+from .position import Position
+
+
 class Char:
 
-    def __init__(self, char: str, pos: "Position", site: int, clock: int):
+    def __init__(self, char: str, pos: "Position", site: int, clock: int) -> None:
         self.char = char
         self.pos = pos
         self.site = site
