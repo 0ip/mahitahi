@@ -1,26 +1,25 @@
 import json
 
 from sortedcontainers import SortedList
-from random import randint, getrandbits
+from random import randint
 from typing import Dict, Sequence
 
 from .char import Char
-from .position import Position
+from .position import Position, BASE_BITS
+from .strategy import RandomStrategy
 
 
 class CRDTDoc:
-    BASE_BITS = 5
     BOUNDARY = 5
 
     def __init__(self, site: int=0) -> None:
-        self._clock: int = 0
-        self._used_strategies: Dict[int, bool] = {}
-
         self.site: int = site
 
+        self._strategy = RandomStrategy()
+        self._clock: int = 0
         self._doc: SortedList["Char"] = SortedList()
         self._doc.add(Char("", Position([0]), -1, self._clock))
-        self._doc.add(Char("", Position([2 ** self.BASE_BITS - 1]), -1, self._clock))
+        self._doc.add(Char("", Position([2 ** BASE_BITS - 1]), -1, self._clock))
 
     def insert(self, pos: int, char: str) -> str:
         self._clock += 1
@@ -46,10 +45,7 @@ class CRDTDoc:
 
         step = min(self.BOUNDARY, randint(0, interval - 1) + 1)
 
-        if depth not in self._used_strategies:
-            self._used_strategies[depth] = bool(getrandbits(1))
-
-        if self._used_strategies[depth]:
+        if self._strategy.for_depth(depth):
             res = p.to_int(depth) + step
         else:
             res = q.to_int(depth) - step
@@ -61,7 +57,8 @@ class CRDTDoc:
         op = json_char["op"]
 
         if op == "i":
-            char = Char(json_char["char"], Position(json_char["pos"]), json_char["site"], json_char["clock"])
+            char = Char(json_char["char"], Position(
+                json_char["pos"]), json_char["site"], json_char["clock"])
             self._doc.add(char)
         elif op == "d":
             char = next(c for c in self._doc if
