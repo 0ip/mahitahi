@@ -31,3 +31,25 @@ def test_apply_patch():
     b_doc.apply_patch(patch_from_a)
 
     assert b_doc.text == "AxB\n"
+
+    init_doc = CRDTDoc()
+    init_doc.site = 1
+    init_doc.apply_patch('''{
+        "op": "i",
+        "char": "A",
+        "pos": [1],
+        "sites": [2],
+        "clock": 1
+    }''')
+
+    init_doc.apply_patch('''{
+        "op": "i",
+        "char": "C",
+        "pos": [1],
+        "sites": [3],
+        "clock": 1
+    }''')
+
+    init_doc.insert(1, "B")
+
+    assert init_doc.text == "ABC"

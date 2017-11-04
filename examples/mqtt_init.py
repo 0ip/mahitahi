@@ -6,9 +6,6 @@ import os
 import paho.mqtt.client as mqtt
 
 from cryptography.fernet import Fernet
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from pycrdt.crdt.crdt import CRDTDoc
 
@@ -20,6 +17,8 @@ doc = CRDTDoc()
 string = "Welcome to PyCRDT - a real CRDT implementation!\n\nThis pad text is synchronized as you type!\n"
 for i, s in enumerate(string):
     doc.insert(i, s)
+
+doc.debug()
 
 enc = f.encrypt(pickle.dumps(doc))
 
