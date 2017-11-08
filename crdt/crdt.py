@@ -66,7 +66,7 @@ class CRDTDoc:
         })
         return json.dumps(patch)
 
-    def debug(self):
+    def debug(self) -> None:
         for char in self._doc:
             print(f"<{char.char.encode()}, {char.pos}, L{char.clock}>\n", end="")
 
@@ -77,7 +77,7 @@ class CRDTDoc:
         return self._site
 
     @site.setter
-    def site(self, value):
+    def site(self, value: int) -> None:
         self._site = value
         self._alloc = Allocator(self._strategy, value)
 
