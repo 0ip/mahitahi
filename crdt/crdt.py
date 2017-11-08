@@ -13,6 +13,8 @@ from .strategy import RandomStrategy
 class CRDTDoc:
 
     BOUNDARY = 5
+    PATCH_INSERT_TOKEN = "i"
+    PATCH_DELETE_TOKEN = "d"
 
     def __init__(self, site: int=0) -> None:
         self._site: int = site
@@ -31,24 +33,24 @@ class CRDTDoc:
         new_char = Char(char, self._alloc(p, q), self._clock)
         self._doc.add(new_char)
 
-        return self._serialize("i", new_char)
+        return self._serialize(self.PATCH_INSERT_TOKEN, new_char)
 
     def delete(self, pos: int) -> str:
         self._clock += 1
         old_char = self._doc[pos + 1]
         self._doc.remove(old_char)
 
-        return self._serialize("d", old_char)
+        return self._serialize(self.PATCH_DELETE_TOKEN, old_char)
 
     def apply_patch(self, patch: str) -> None:
         json_char = json.loads(patch)
         op = json_char["op"]
 
-        if op == "i":
+        if op == self.PATCH_INSERT_TOKEN:
             char = Char(json_char["char"], Position(
                 json_char["pos"], json_char["sites"]), json_char["clock"])
             self._doc.add(char)
-        elif op == "d":
+        elif op == self.PATCH_DELETE_TOKEN:
             char = next(c for c in self._doc if
                         c.pos.pos == json_char["pos"] and
                         c.pos.sites == json_char["sites"] and
@@ -57,13 +59,14 @@ class CRDTDoc:
             self._doc.remove(char)
 
     def _serialize(self, op: str, char: "Char") -> str:
-        patch = {"op": op, "src": self.site}
-        patch.update({
+        patch = {
+            "op": op,
+            "src": self.site,
             "char": char.char,
             "pos": char.pos.pos,
             "sites": char.pos.sites,
             "clock": char.clock
-        })
+        }
         return json.dumps(patch)
 
     def debug(self) -> None:
