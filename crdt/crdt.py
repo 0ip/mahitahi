@@ -1,9 +1,10 @@
 import json
 
-from sortedcontainers import SortedList
 from random import randint
+from sortedcontainers import SortedList
 from typing import Dict, Sequence
 
+from .alloc import Allocator
 from .char import Char
 from .position import Position, BASE_BITS
 from .strategy import RandomStrategy
@@ -14,9 +15,10 @@ class CRDTDoc:
     BOUNDARY = 5
 
     def __init__(self, site: int=0) -> None:
-        self.site: int = site
+        self._site: int = site
 
         self._strategy = RandomStrategy()
+        self._alloc = Allocator(self._strategy, self.site)
         self._clock: int = 0
         self._doc: SortedList["Char"] = SortedList()
         self._doc.add(Char("", Position([0], [-1]), self._clock))
@@ -38,31 +40,13 @@ class CRDTDoc:
 
         return self._serialize("d", old_char)
 
-    def _alloc(self, p: "Position", q: "Position") -> "Position":
-        depth = 0
-        interval = 0
-        equal = False
-        while interval < 1:
-            depth += 1
-            interval, equal = p.interval_between(q, depth)
-
-        step = min(self.BOUNDARY, randint(0, interval - 1) + 1)
-
-        if self._strategy.for_depth(depth) or equal:
-            res = p.to_int(depth) + step
-        else:
-            res = q.to_int(depth) - step
-
-        sites = p.sites + [self.site]
-
-        return Position.from_int(res, depth, sites, base_bits=p.base_bits)
-
     def apply_patch(self, patch: str) -> None:
         json_char = json.loads(patch)
         op = json_char["op"]
 
         if op == "i":
-            char = Char(json_char["char"], Position(json_char["pos"], json_char["sites"]), json_char["clock"])
+            char = Char(json_char["char"], Position(
+                json_char["pos"], json_char["sites"]), json_char["clock"])
             self._doc.add(char)
         elif op == "d":
             char = next(c for c in self._doc if
@@ -84,9 +68,18 @@ class CRDTDoc:
 
     def debug(self):
         for char in self._doc:
-            print(f"<{char.char.encode()}, {char.pos}, L{char.clock}> ", end="")
+            print(f"<{char.char.encode()}, {char.pos}, L{char.clock}>\n", end="")
 
         print()
+
+    @property
+    def site(self) -> int:
+        return self._site
+
+    @site.setter
+    def site(self, value):
+        self._site = value
+        self._alloc = Allocator(self._strategy, value)
 
     @property
     def text(self) -> str:
