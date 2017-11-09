@@ -28,6 +28,7 @@ class Allocator:
 
         sites_len = depth - len(p.sites)
         sites = p.sites + [self._site] * sites_len
+        sites[-1] = self._site
 
         return Position.from_int(res, depth, sites, base_bits=p.base_bits)
 
