@@ -33,13 +33,28 @@ class Editor(QPlainTextEdit):
     def keyPressEvent(self, e):
         cursor = self.textCursor()
 
-        if e.key() == Qt.Key_Backspace:
-            pos = cursor.position() - 1
-            self.del_evt.emit(pos)
-
-        elif e.text() and e.key() != Qt.Key_Backspace:
+        if e.matches(QKeySequence.Paste) and QApplication.clipboard().text():
             pos = cursor.position()
-            self.ins_evt.emit(pos, e.text())
+            for i, c in enumerate(QApplication.clipboard().text()):
+                self.ins_evt.emit(pos + i, c)
+
+        elif e.key() == Qt.Key_Backspace:
+            sel_start = cursor.selectionStart()
+            sel_end = cursor.selectionEnd()
+            if sel_start == sel_end:
+                self.del_evt.emit(cursor.position() - 1)
+            else:
+                for pos in range(sel_end, sel_start, -1):
+                    self.del_evt.emit(pos - 1)
+
+        elif e.key() != Qt.Key_Backspace and e.text() and e.modifiers() != Qt.ControlModifier:
+            sel_start = cursor.selectionStart()
+            sel_end = cursor.selectionEnd()
+            if sel_start != sel_end:
+                for pos in range(sel_end, sel_start, -1):
+                    self.del_evt.emit(pos - 1)
+
+            self.ins_evt.emit(sel_start, e.text())
 
         QPlainTextEdit.keyPressEvent(self, e)
 
@@ -69,7 +84,7 @@ class Main(QMainWindow):
         self.client.on_message = self.on_message
         self.client.connect("iot.eclipse.org", 1883, 60)
 
-        self.window_title = f"PyCRDT Demo | Pad: {self.pad_name}"
+        self.window_title = f"PyCRDT Demo | Pad: {self.pad_name} | Site: {self.site} | <F3> debugging"
 
         self.setWindowTitle(self.window_title)
         self.setGeometry(400, 400, 800, 600)
@@ -82,20 +97,30 @@ class Main(QMainWindow):
         self.editor.del_evt.connect(self.on_del)
         self.editor.ins_evt.connect(self.on_ins)
 
+        shortcut = QShortcut(QKeySequence("F3"), self)
+        shortcut.activated.connect(self.print_debug)
+
         self.client.loop_start()
 
+    def print_debug(self):
+        self.doc.debug()
+
     def on_connect(self, client, userdata, flags, rc):
-        self.client.subscribe(self.mqtt_name)
+        self.client.subscribe(self.mqtt_name, qos=2)
 
     @pyqtSlot(int)
     def on_del(self, pos):
         patch = self.doc.delete(pos)
-        self.client.publish(self.mqtt_name, "p ".encode() + self.fernet.encrypt(patch.encode()))
+        print(f"Sending patch: {patch}")
+        self.client.publish(self.mqtt_name, "p ".encode() +
+                            self.fernet.encrypt(patch.encode()), qos=2)
 
     @pyqtSlot(int, str)
     def on_ins(self, pos, char):
         patch = self.doc.insert(pos, char)
-        self.client.publish(self.mqtt_name, "p ".encode() + self.fernet.encrypt(patch.encode()))
+        print(f"Sending patch: {patch}")
+        self.client.publish(self.mqtt_name, "p ".encode() +
+                            self.fernet.encrypt(patch.encode()), qos=2)
 
     def on_message(self, client, userdata, msg):
         code, payload = msg.payload.decode().split(" ")
@@ -104,6 +129,8 @@ class Main(QMainWindow):
         if code == "p":
             patch = json.loads(payload)
             if patch["src"] != self.site:
+                print(f"Received patch: {payload}")
+
                 self.doc.apply_patch(payload)
                 self.editor.upd_text.emit(self.doc.text)
         elif code == "i":
