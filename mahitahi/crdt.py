@@ -10,7 +10,7 @@ from .position import Position, BASE_BITS
 from .strategy import RandomStrategy
 
 
-class CRDTDoc:
+class Doc:
 
     BOUNDARY = 5
     PATCH_INSERT_TOKEN = "i"

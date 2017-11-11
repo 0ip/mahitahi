@@ -11,7 +11,8 @@ from cryptography.fernet import Fernet
 
 import paho.mqtt.client as mqtt
 
-from pycrdt.crdt.crdt import CRDTDoc
+sys.path.append("..")
+from mahitahi import Doc
 
 
 class Editor(QPlainTextEdit):
@@ -84,7 +85,7 @@ class Main(QMainWindow):
         self.client.on_message = self.on_message
         self.client.connect("iot.eclipse.org", 1883, 60)
 
-        self.window_title = f"PyCRDT Demo | Pad: {self.pad_name} | Site: {self.site} | <F3> debugging"
+        self.window_title = f"MahiTahi Demo | Pad: {self.pad_name} | Site: {self.site} | <F3> debugging"
 
         self.setWindowTitle(self.window_title)
         self.setGeometry(400, 400, 800, 600)
@@ -92,7 +93,7 @@ class Main(QMainWindow):
         self.editor = Editor()
         self.setCentralWidget(self.editor)
 
-        self.doc = CRDTDoc()
+        self.doc = Doc()
         self.doc.site = self.site
         self.editor.del_evt.connect(self.on_del)
         self.editor.ins_evt.connect(self.on_ins)

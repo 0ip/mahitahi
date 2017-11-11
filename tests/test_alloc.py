@@ -1,8 +1,8 @@
 import pytest
 
-from crdt.alloc import Allocator
-from crdt.position import Position
-from crdt.strategy import RandomStrategy
+from mahitahi.alloc import Allocator
+from mahitahi.position import Position
+from mahitahi.strategy import RandomStrategy
 
 BASE_BITS = 5
 

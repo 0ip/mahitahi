@@ -1,6 +1,6 @@
 import pytest
 
-from crdt.position import Position
+from mahitahi.position import Position
 
 BASE_BITS = 5
 

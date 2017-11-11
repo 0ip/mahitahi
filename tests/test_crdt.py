@@ -3,11 +3,11 @@ import random
 
 from copy import deepcopy
 
-from crdt.crdt import CRDTDoc
+from mahitahi.crdt import Doc
 
 
 def test_apply_patch_1():
-    init_doc = CRDTDoc()
+    init_doc = Doc()
     init_doc.insert(0, "A")
     init_doc.insert(1, "B")
     init_doc.insert(2, "C")
@@ -35,7 +35,7 @@ def test_apply_patch_1():
 
 
 def test_apply_patch_2():
-    init_doc = CRDTDoc()
+    init_doc = Doc()
     init_doc.site = 1
     init_doc.apply_patch('''{
         "op": "i",
@@ -61,7 +61,7 @@ def test_apply_patch_2():
 def test_insert():
     test_str = "The quick brown fox jumps over the lazy dog"
 
-    init_doc = CRDTDoc()
+    init_doc = Doc()
 
     for c in test_str:
         init_doc.insert(0, c)

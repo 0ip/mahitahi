@@ -1,14 +1,11 @@
 <div align="center">
-    <h1>PyCRDT</h1>
+    <h1>MahiTahi</h1>
     <h5>a Python-based (sequence) CRDT library for collaborative text editing</h5>
 </div>
 
 <div align="center">
-    <a href="https://travis-ci.org/0ip/pycrdt">
-        <img src="https://img.shields.io/travis/0ip/pycrdt.svg?style=flat-square">
-    </a>
-    <a href='http://boilpy.readthedocs.io/en/latest/?badge=latest'>
-        <img src='https://readthedocs.org/projects/pycrdt/badge/?style=flat-square&version=latest'/>
+    <a href="https://travis-ci.org/0ip/mahitahi">
+        <img src="https://img.shields.io/travis/0ip/mahitahi.svg?style=flat-square">
     </a>
 </div>
 
@@ -20,6 +17,7 @@ See `examples/mqtt_gui.py` for an Etherpad-like clone realized with PyQt's `QPla
 
 ### Table of Contents
 * [Installation](#installation)
+* [Usage](#usage)
 * [Running tests](#tests)
 * [License](#license)
 
@@ -27,7 +25,35 @@ See `examples/mqtt_gui.py` for an Etherpad-like clone realized with PyQt's `QPla
 Download or clone the repository using `git`:
 
 ```console
-$ git clone https://github.com/0ip/pycrdt.git
+$ git clone https://github.com/0ip/mahitahi.git
+```
+
+#### Usage
+
+```python
+from mahitahi import Doc
+
+init_doc = Doc()
+init_doc.insert(0, "A")
+init_doc.insert(1, "B")
+init_doc.insert(2, "C")
+init_doc.insert(3, "\n")
+
+a_doc = deepcopy(init_doc)
+a_doc.site = 1
+patch_from_a = a_doc.insert(1, "x")
+
+b_doc = deepcopy(init_doc)
+b_doc.site = 2
+patch_from_b = b_doc.delete(2)
+
+a_doc.apply_patch(patch_from_b)
+
+assert a_doc.text == "AxB\n"
+
+b_doc.apply_patch(patch_from_a)
+
+assert b_doc.text == "AxB\n"
 ```
 
 #### Running tests
