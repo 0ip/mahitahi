@@ -12,7 +12,6 @@ from .strategy import RandomStrategy
 
 class Doc:
 
-    BOUNDARY = 5
     PATCH_INSERT_TOKEN = "i"
     PATCH_DELETE_TOKEN = "d"
 
@@ -21,6 +20,7 @@ class Doc:
 
         self._strategy = RandomStrategy()
         self._alloc = Allocator(self._strategy, self.site)
+
         self._clock: int = 0
         self._doc: SortedList["Char"] = SortedList()
         self._doc.add(Char("", Position([0], [-1]), self._clock))
