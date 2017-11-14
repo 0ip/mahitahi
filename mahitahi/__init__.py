@@ -1,1 +1,1 @@
-from .crdt import Doc
+from .doc import Doc

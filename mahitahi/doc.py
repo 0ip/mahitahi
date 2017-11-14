@@ -2,7 +2,7 @@ import json
 
 from random import randint
 from sortedcontainers import SortedList
-from typing import Dict, Sequence
+from typing import Dict, Sequence, List
 
 from .alloc import Allocator
 from .char import Char
@@ -87,3 +87,7 @@ class Doc:
     @property
     def text(self) -> str:
         return "".join([c.char for c in self._doc])
+
+    @property
+    def authors(self) -> List[int]:
+        return [c.author for c in self._doc]

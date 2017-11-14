@@ -13,8 +13,7 @@ class Position:
 
     @classmethod
     def from_int(cls, pos: int, depth: int, sites: List[int], base_bits: int=0) -> "Position":
-        new_pos = cls(base_bits=base_bits)
-        new_pos.sites = sites
+        new_pos = cls(sites=sites, base_bits=base_bits)
 
         for _depth in range(depth, 0, -1):
             shift = base_bits + _depth - 1

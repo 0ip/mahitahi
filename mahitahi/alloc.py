@@ -12,6 +12,9 @@ class Allocator:
         self._site = site
 
     def alloc(self, p: "Position", q: "Position") -> "Position":
+        if p.pos == q.pos and p.sites == q.sites:
+            raise Exception("Cannot allocate between identical identifiers.")
+
         depth = 0
         interval = 0
         equal = False

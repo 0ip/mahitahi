@@ -15,21 +15,34 @@ sys.path.append("..")
 from mahitahi import Doc
 
 
-class Editor(QPlainTextEdit):
+class Editor(QTextEdit):
     upd_text = pyqtSignal(str)  # in
-    del_evt = pyqtSignal(int)  # out
-    ins_evt = pyqtSignal(int, str)  # out
+    del_evt = pyqtSignal(str)  # out
+    ins_evt = pyqtSignal(str)  # out
 
-    def __init__(self):
+    def __init__(self, site):
         self.view = QPlainTextEdit.__init__(self)
         self.setFrameStyle(QFrame.NoFrame)
 
         self.font = QFont()
         self.font.setStyleHint(QFont.Monospace)
         self.font.setFixedPitch(True)
+        self.font.setPointSize(16)
         self.setFont(self.font)
 
+        self.doc = Doc()
+        self.doc.site = site
+
         self.upd_text.connect(self.on_upd_text)
+
+        shortcut_f3 = QShortcut(QKeySequence("F3"), self)
+        shortcut_f3.activated.connect(self.debug_crdt)
+
+        shortcut_f4 = QShortcut(QKeySequence("F4"), self)
+        shortcut_f4.activated.connect(self.debug_widget)
+
+        shortcut_f5 = QShortcut(QKeySequence("F5"), self)
+        shortcut_f5.activated.connect(self.reload_from_crdt)
 
     def keyPressEvent(self, e):
         cursor = self.textCursor()
@@ -37,35 +50,91 @@ class Editor(QPlainTextEdit):
         if e.matches(QKeySequence.Paste) and QApplication.clipboard().text():
             pos = cursor.position()
             for i, c in enumerate(QApplication.clipboard().text()):
-                self.ins_evt.emit(pos + i, c)
+                patch = self.doc.insert(pos + i, c)
+                self.ins_evt.emit(patch)
 
         elif e.key() == Qt.Key_Backspace:
             sel_start = cursor.selectionStart()
             sel_end = cursor.selectionEnd()
             if sel_start == sel_end:
-                self.del_evt.emit(cursor.position() - 1)
+                patch = self.doc.delete(cursor.position() - 1)
+                self.del_evt.emit(patch)
             else:
                 for pos in range(sel_end, sel_start, -1):
-                    self.del_evt.emit(pos - 1)
+                    patch = self.doc.delete(pos - 1)
+                    self.del_evt.emit(patch)
 
         elif e.key() != Qt.Key_Backspace and e.text() and e.modifiers() != Qt.ControlModifier:
             sel_start = cursor.selectionStart()
             sel_end = cursor.selectionEnd()
             if sel_start != sel_end:
                 for pos in range(sel_end, sel_start, -1):
-                    self.del_evt.emit(pos - 1)
+                    patch = self.doc.delete(pos - 1)
+                    self.del_evt.emit(patch)
 
-            self.ins_evt.emit(sel_start, e.text())
+            patch = self.doc.insert(sel_start, e.text())
+            self.ins_evt.emit(patch)
 
-        QPlainTextEdit.keyPressEvent(self, e)
+        QTextEdit.keyPressEvent(self, e)
 
     @pyqtSlot(str)
-    def on_upd_text(self, text):
+    def on_upd_text(self, patch):
+        self.doc.apply_patch(patch)
+
         cursor = self.textCursor()
         old_pos = cursor.position()
-        self.setPlainText(text)
+        self.setPlainText(self.doc.text)
         cursor.setPosition(old_pos)
         self.setTextCursor(cursor)
+
+    def debug_crdt(self):
+        self.doc.debug()
+
+    def debug_widget(self):
+        print(self.toPlainText().encode())
+
+    def reload_from_crdt(self):
+        self.setPlainText(self.doc.text)
+
+
+class AuthorHighlighter(QSyntaxHighlighter):
+
+    def __init__(self, parent):
+        QSyntaxHighlighter.__init__(self, parent)
+        self.parent = parent
+
+    def highlightBlock(self, text):
+        curr_line = self.previousBlockState() + 1
+
+        doc_line = 0
+        block_pos = 0
+
+        text_format = QTextCharFormat()
+
+        for c, a in zip(self.parent.doc.text, self.parent.doc.authors[1:-1]):
+            if c in ("\n", "\r"):
+                doc_line += 1
+                continue
+            else:
+                if doc_line == curr_line:
+                    color = QColor(255, 255, 255)
+
+                    if a == 1:
+                        color = QColor(187, 222, 251)
+                    elif a == 2:
+                        color = QColor(222, 187, 251)
+                    elif a == 3:
+                        color = QColor(222, 251, 187)
+
+                    text_format.setBackground(QBrush(color, Qt.SolidPattern))
+
+                    self.setFormat(block_pos, 1, text_format)
+
+                    block_pos += 1
+                elif doc_line > curr_line:
+                    break
+
+        self.setCurrentBlockState(self.previousBlockState() + 1)
 
 
 class Main(QMainWindow):
@@ -85,40 +154,31 @@ class Main(QMainWindow):
         self.client.on_message = self.on_message
         self.client.connect("iot.eclipse.org", 1883, 60)
 
-        self.window_title = f"MahiTahi Demo | Pad: {self.pad_name} | Site: {self.site} | <F3> debugging"
+        self.window_title = f"MahiTahi Demo | Pad: {self.pad_name} | Site: {self.site}"
 
         self.setWindowTitle(self.window_title)
         self.setGeometry(400, 400, 800, 600)
 
-        self.editor = Editor()
+        self.editor = Editor(self.site)
+        self.highlighter = AuthorHighlighter(self.editor)
         self.setCentralWidget(self.editor)
 
-        self.doc = Doc()
-        self.doc.site = self.site
         self.editor.del_evt.connect(self.on_del)
         self.editor.ins_evt.connect(self.on_ins)
 
-        shortcut = QShortcut(QKeySequence("F3"), self)
-        shortcut.activated.connect(self.print_debug)
-
         self.client.loop_start()
-
-    def print_debug(self):
-        self.doc.debug()
 
     def on_connect(self, client, userdata, flags, rc):
         self.client.subscribe(self.mqtt_name, qos=2)
 
-    @pyqtSlot(int)
-    def on_del(self, pos):
-        patch = self.doc.delete(pos)
+    @pyqtSlot(str)
+    def on_del(self, patch):
         print(f"Sending patch: {patch}")
         self.client.publish(self.mqtt_name, "p ".encode() +
                             self.fernet.encrypt(patch.encode()), qos=2)
 
-    @pyqtSlot(int, str)
-    def on_ins(self, pos, char):
-        patch = self.doc.insert(pos, char)
+    @pyqtSlot(str)
+    def on_ins(self, patch):
         print(f"Sending patch: {patch}")
         self.client.publish(self.mqtt_name, "p ".encode() +
                             self.fernet.encrypt(patch.encode()), qos=2)
@@ -132,13 +192,11 @@ class Main(QMainWindow):
             if patch["src"] != self.site:
                 print(f"Received patch: {payload}")
 
-                self.doc.apply_patch(payload)
-                self.editor.upd_text.emit(self.doc.text)
+                self.editor.upd_text.emit(payload.decode())
         elif code == "i":
-            self.doc = pickle.loads(payload)
-            self.doc.site = self.site
-
-            self.editor.upd_text.emit(self.doc.text)
+            doc = pickle.loads(payload)
+            for c in doc._doc[1:-1]:
+                self.editor.upd_text.emit(doc._serialize("i", c))
 
 
 def main():

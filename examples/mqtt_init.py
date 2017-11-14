@@ -16,7 +16,7 @@ key = b"7tLEmPE51jXJRwNUIu5zQOOsoMwjlfgydyVeI2n8guw="
 f = Fernet(key)
 
 doc = Doc()
-string = "Welcome to PyCRDT - a real CRDT implementation!\n\nThis pad text is synchronized as you type!\n"
+string = "Welcome to PyCRDT - a real CRDT implementation!\r\rThis pad text is synchronized as you type!\r"
 for i, s in enumerate(string):
     doc.insert(i, s)
 

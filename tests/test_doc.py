@@ -3,7 +3,7 @@ import random
 
 from copy import deepcopy
 
-from mahitahi.crdt import Doc
+from mahitahi.doc import Doc
 
 
 def test_apply_patch_1():
