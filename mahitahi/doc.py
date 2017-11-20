@@ -91,3 +91,7 @@ class Doc:
     @property
     def authors(self) -> List[int]:
         return [c.author for c in self._doc]
+
+    @property
+    def patch_set(self) -> List[str]:
+        return [self._serialize(self.PATCH_INSERT_TOKEN, c) for c in self._doc]

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-import pickle
 import sys
 import json
+import uuid
+import base64
+import random
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -15,10 +17,110 @@ sys.path.append("..")
 from mahitahi import Doc
 
 
+class Main(QMainWindow):
+
+    HOST = "iot.eclipse.org"
+
+    def __init__(self, parent=None):
+        QMainWindow.__init__(self, parent)
+
+        self.patch_stack = []
+        self.author = False
+
+        resp, ok = QInputDialog.getText(
+            self, "Portal Setup", "Paste a Portal ID or click cancel to create a new ID:"
+        )
+
+        if not ok:
+            self.portal_id, self.pad_name, self.fernet_key = self.generate_portal_tuple()
+            self.author = True
+            print(f"Share this portal ID:\n\n  {self.portal_id}")
+        else:
+            self.pad_name, self.fernet_key = self.parse_portal_id(resp)
+
+        self.fernet = Fernet(self.fernet_key)
+        self.site = int(random.getrandbits(32))
+        self.mqtt_name = f"mahitahi/pad/{self.pad_name}"
+        self.subs = {
+            self.mqtt_name + "/aloha": self.on_topic_aloha,
+            self.mqtt_name + "/patch": self.on_topic_patch
+        }
+
+        self.client = mqtt.Client()
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
+        self.client.connect(self.HOST, 1883, 60)
+
+        self.window_title = f"MahiTahi Demo | Pad: {self.pad_name} | Site: {self.site} | Author: {self.author}"
+
+        self.setWindowTitle(self.window_title)
+        self.setGeometry(400, 400, 800, 600)
+
+        self.editor = Editor(self.site)
+        self.highlighter = AuthorHighlighter(self.editor)
+        self.setCentralWidget(self.editor)
+
+        self.editor.change_evt.connect(self.on_change)
+
+        self.client.loop_start()
+
+    def on_connect(self, client, userdata, flags, rc):
+        for topic in self.subs.keys():
+            self.client.subscribe(topic, qos=2)
+
+        if not self.author:
+            self.client.publish(self.mqtt_name + "/aloha", "a")
+
+    def generate_portal_tuple(self, include_server=False):
+        pad = uuid.uuid4().hex
+        key = Fernet.generate_key().decode()
+
+        temp_str = ""
+        if include_server:
+            temp_str += f"{self.HOST}:"
+
+        temp_str += f"{pad}:{key}"
+
+        return base64.b64encode(temp_str.encode()).decode(), pad, key.encode()
+
+    def parse_portal_id(self, portal_id):
+        tup = base64.b64decode(portal_id.encode()).decode().split(":")
+
+        if len(tup) == 2:
+            pad, key = tup
+            return pad, key.encode()
+        elif len(tup) == 3:
+            server, pad, key = tup
+            return server, pad, key.encode()
+
+    @pyqtSlot(str)
+    def on_change(self, patch):
+        print(f"Sending patch: {patch}")
+        payload = self.fernet.encrypt(patch.encode())
+        self.patch_stack.append(payload)
+        self.client.publish(self.mqtt_name + "/patch", payload, qos=2)
+
+    def on_message(self, client, userdata, msg):
+        self.subs[msg.topic](msg.payload)
+
+    def on_topic_aloha(self, payload):
+        if self.author:
+            for patch in self.patch_stack:
+                self.client.publish(self.mqtt_name + "/patch", patch, qos=2)
+
+    def on_topic_patch(self, payload):
+        if payload not in self.patch_stack:
+            payload_decrypted = self.fernet.decrypt(payload)
+            patch = json.loads(payload_decrypted)
+            if patch["src"] != self.site:
+                print(f"Received patch: {payload_decrypted.decode()}")
+                self.patch_stack.append(payload)
+                self.editor.upd_text.emit(payload_decrypted.decode())
+
+
 class Editor(QTextEdit):
     upd_text = pyqtSignal(str)  # in
-    del_evt = pyqtSignal(str)  # out
-    ins_evt = pyqtSignal(str)  # out
+    change_evt = pyqtSignal(str)  # out
 
     def __init__(self, site):
         self.view = QPlainTextEdit.__init__(self)
@@ -51,18 +153,21 @@ class Editor(QTextEdit):
             pos = cursor.position()
             for i, c in enumerate(QApplication.clipboard().text()):
                 patch = self.doc.insert(pos + i, c)
-                self.ins_evt.emit(patch)
+                self.change_evt.emit(patch)
 
         elif e.key() == Qt.Key_Backspace:
+            if not self.toPlainText():
+                return
+
             sel_start = cursor.selectionStart()
             sel_end = cursor.selectionEnd()
             if sel_start == sel_end:
                 patch = self.doc.delete(cursor.position() - 1)
-                self.del_evt.emit(patch)
+                self.change_evt.emit(patch)
             else:
                 for pos in range(sel_end, sel_start, -1):
                     patch = self.doc.delete(pos - 1)
-                    self.del_evt.emit(patch)
+                    self.change_evt.emit(patch)
 
         elif e.key() != Qt.Key_Backspace and e.text() and e.modifiers() != Qt.ControlModifier:
             sel_start = cursor.selectionStart()
@@ -70,10 +175,10 @@ class Editor(QTextEdit):
             if sel_start != sel_end:
                 for pos in range(sel_end, sel_start, -1):
                     patch = self.doc.delete(pos - 1)
-                    self.del_evt.emit(patch)
+                    self.change_evt.emit(patch)
 
             patch = self.doc.insert(sel_start, e.text())
-            self.ins_evt.emit(patch)
+            self.change_evt.emit(patch)
 
         QTextEdit.keyPressEvent(self, e)
 
@@ -99,6 +204,16 @@ class Editor(QTextEdit):
 
 class AuthorHighlighter(QSyntaxHighlighter):
 
+    COLORS = (
+        (251, 222, 187),
+        (187, 251, 222),
+        (222, 251, 187),
+        (222, 187, 251),
+        (187, 222, 251)
+    )
+
+    NUM_COLORS = len(COLORS)
+
     def __init__(self, parent):
         QSyntaxHighlighter.__init__(self, parent)
         self.parent = parent
@@ -117,16 +232,7 @@ class AuthorHighlighter(QSyntaxHighlighter):
                 continue
             else:
                 if doc_line == curr_line:
-                    color = QColor(255, 255, 255)
-
-                    if a == 1:
-                        color = QColor(187, 222, 251)
-                    elif a == 2:
-                        color = QColor(222, 187, 251)
-                    elif a == 3:
-                        color = QColor(222, 251, 187)
-
-                    text_format.setBackground(QBrush(color, Qt.SolidPattern))
+                    text_format.setBackground(QBrush(self.get_author_color(a), Qt.SolidPattern))
 
                     self.setFormat(block_pos, 1, text_format)
 
@@ -136,67 +242,8 @@ class AuthorHighlighter(QSyntaxHighlighter):
 
         self.setCurrentBlockState(self.previousBlockState() + 1)
 
-
-class Main(QMainWindow):
-
-    def __init__(self, parent=None):
-        QMainWindow.__init__(self, parent)
-
-        self.key = b"7tLEmPE51jXJRwNUIu5zQOOsoMwjlfgydyVeI2n8guw="
-        self.fernet = Fernet(self.key)
-
-        self.site = int(input("Enter side no: "))
-        self.pad_name = str(input("Enter pad name (type demo to start with some text): "))
-        self.mqtt_name = f"test/pad/{self.pad_name}"
-
-        self.client = mqtt.Client()
-        self.client.on_connect = self.on_connect
-        self.client.on_message = self.on_message
-        self.client.connect("iot.eclipse.org", 1883, 60)
-
-        self.window_title = f"MahiTahi Demo | Pad: {self.pad_name} | Site: {self.site}"
-
-        self.setWindowTitle(self.window_title)
-        self.setGeometry(400, 400, 800, 600)
-
-        self.editor = Editor(self.site)
-        self.highlighter = AuthorHighlighter(self.editor)
-        self.setCentralWidget(self.editor)
-
-        self.editor.del_evt.connect(self.on_del)
-        self.editor.ins_evt.connect(self.on_ins)
-
-        self.client.loop_start()
-
-    def on_connect(self, client, userdata, flags, rc):
-        self.client.subscribe(self.mqtt_name, qos=2)
-
-    @pyqtSlot(str)
-    def on_del(self, patch):
-        print(f"Sending patch: {patch}")
-        self.client.publish(self.mqtt_name, "p ".encode() +
-                            self.fernet.encrypt(patch.encode()), qos=2)
-
-    @pyqtSlot(str)
-    def on_ins(self, patch):
-        print(f"Sending patch: {patch}")
-        self.client.publish(self.mqtt_name, "p ".encode() +
-                            self.fernet.encrypt(patch.encode()), qos=2)
-
-    def on_message(self, client, userdata, msg):
-        code, payload = msg.payload.decode().split(" ")
-        payload = self.fernet.decrypt(payload.encode())
-
-        if code == "p":
-            patch = json.loads(payload)
-            if patch["src"] != self.site:
-                print(f"Received patch: {payload}")
-
-                self.editor.upd_text.emit(payload.decode())
-        elif code == "i":
-            doc = pickle.loads(payload)
-            for c in doc._doc[1:-1]:
-                self.editor.upd_text.emit(doc._serialize("i", c))
+    def get_author_color(self, author_site):
+        return QColor(*self.COLORS[author_site % self.NUM_COLORS])
 
 
 def main():
