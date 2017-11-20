@@ -26,24 +26,37 @@ class Main(QMainWindow):
 
         self.patch_stack = []
         self.author = False
+        self.known_authors = []
 
         resp, ok = QInputDialog.getText(
-            self, "Portal Setup", "Paste a Portal ID or click cancel to create a new ID:"
+            self, "Portal Setup", "Paste the Portal ID you received or enter nothing to create your own:"
         )
 
         if not ok:
+            sys.exit()
+
+        if not resp:
             self.portal_id, self.pad_name, self.fernet_key = self.generate_portal_tuple()
             self.author = True
-            print(f"Share this portal ID:\n\n  {self.portal_id}")
+            print(f"Share this Portal ID with someone:\n\n  {self.portal_id}\n\n")
         else:
             self.pad_name, self.fernet_key = self.parse_portal_id(resp)
 
         self.fernet = Fernet(self.fernet_key)
-        self.site = int(random.getrandbits(32))
+
+        self.site = 0
+        if not self.author:
+            self.site = int(random.getrandbits(32))
+
+        self.known_authors.append(self.site)
+
         self.mqtt_name = f"mahitahi/pad/{self.pad_name}"
         self.subs = {
             self.mqtt_name + "/aloha": self.on_topic_aloha,
-            self.mqtt_name + "/patch": self.on_topic_patch
+            self.mqtt_name + "/patch": self.on_topic_patch,
+            self.mqtt_name + "/authors/enter": self.on_topic_authors,
+            self.mqtt_name + "/authors/set": self.on_topic_authors,
+            self.mqtt_name + "/authors/leave": self.on_topic_authors
         }
 
         self.client = mqtt.Client()
@@ -51,9 +64,8 @@ class Main(QMainWindow):
         self.client.on_message = self.on_message
         self.client.connect(self.HOST, 1883, 60)
 
-        self.window_title = f"MahiTahi Demo | Pad: {self.pad_name} | Site: {self.site} | Author: {self.author}"
+        self.update_title()
 
-        self.setWindowTitle(self.window_title)
         self.setGeometry(400, 400, 800, 600)
 
         self.editor = Editor(self.site)
@@ -64,12 +76,18 @@ class Main(QMainWindow):
 
         self.client.loop_start()
 
+    def update_title(self):
+        self.window_title = f"MahiTahi Demo | Pad: {self.pad_name} | Site: {self.site} | Author: {self.author}"
+        self.setWindowTitle(self.window_title)
+
     def on_connect(self, client, userdata, flags, rc):
         for topic in self.subs.keys():
             self.client.subscribe(topic, qos=2)
 
+        self.client.publish(self.mqtt_name + "/authors/enter", str(self.site))
+
         if not self.author:
-            self.client.publish(self.mqtt_name + "/aloha", "a")
+            self.client.publish(self.mqtt_name + "/aloha", str(self.site))
 
     def generate_portal_tuple(self, include_server=False):
         pad = uuid.uuid4().hex
@@ -101,14 +119,24 @@ class Main(QMainWindow):
         self.client.publish(self.mqtt_name + "/patch", payload, qos=2)
 
     def on_message(self, client, userdata, msg):
-        self.subs[msg.topic](msg.payload)
+        self.subs[msg.topic](msg.topic, msg.payload)
 
-    def on_topic_aloha(self, payload):
+    def on_topic_aloha(self, topic, payload):
         if self.author:
+
+            set_dict = {
+                "dst": int(payload),
+                "authors": self.known_authors
+            }
+
+            print("Author deeds: Sending known authors...")
+            self.client.publish(self.mqtt_name + "/authors/set", json.dumps(set_dict))
+
+            print("Author deeds: Sending known patches...")
             for patch in self.patch_stack:
                 self.client.publish(self.mqtt_name + "/patch", patch, qos=2)
 
-    def on_topic_patch(self, payload):
+    def on_topic_patch(self, topic, payload):
         if payload not in self.patch_stack:
             payload_decrypted = self.fernet.decrypt(payload)
             patch = json.loads(payload_decrypted)
@@ -116,6 +144,32 @@ class Main(QMainWindow):
                 print(f"Received patch: {payload_decrypted.decode()}")
                 self.patch_stack.append(payload)
                 self.editor.upd_text.emit(payload_decrypted.decode())
+
+    def on_topic_authors(self, topic, payload):
+        if topic.endswith("enter"):
+            site = int(payload)
+            if site != self.site:
+                print(f"New client joined: {site}")
+                self.known_authors.append(site)
+        elif topic.endswith("set"):
+            set_dict = json.loads(payload)
+            if set_dict["dst"] == self.site:
+                self.known_authors = set_dict["authors"]
+                print(f"Received known authors from current author: {self.known_authors}")
+        elif topic.endswith("leave"):
+            site = int(payload)
+            print(f"Client left: {site}")
+            self.known_authors.remove(site)
+            new_author = min(self.known_authors)
+            print(f"New author should be: {new_author}")
+            if self.site == new_author:
+                print("Declared us as new author!")
+                self.author = True
+                self.update_title()
+
+    def closeEvent(self, event):
+        self.client.publish(self.mqtt_name + "/authors/leave", self.site)
+        event.accept()
 
 
 class Editor(QTextEdit):
