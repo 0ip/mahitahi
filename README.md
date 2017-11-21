@@ -18,6 +18,7 @@ See `examples/mqtt_gui.py` for an Etherpad-like clone realized with PyQt's `QPla
 ### Table of Contents
 * [Installation](#installation)
 * [Usage](#usage)
+* [Example](#example)
 * [Running tests](#tests)
 * [License](#license)
 
@@ -55,6 +56,12 @@ b_doc.apply_patch(patch_from_a)
 
 assert b_doc.text == "AxB\n"
 ```
+
+#### Example
+
+![Screenshot](https://raw.githubusercontent.com/0ip/mahitahi/assets/screenshot.png)
+
+Starting `examples/mqtt_gui.py` prompts the user for a "Portal ID". This ID contains the MQTT host, the pad name and the encryption token. It is intented to share this ID with someone you want to edit this pad with, without the need to manually enter these connection details. 
 
 #### Running tests
 
