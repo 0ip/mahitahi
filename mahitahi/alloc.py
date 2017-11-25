@@ -1,8 +1,9 @@
 from random import randint
 
-from .position import Position
+from .position import Position, BASE_BITS
 
 BOUNDARY = 5
+MAX_DEPTH = 32 - BASE_BITS
 
 
 class Allocator:
@@ -21,6 +22,9 @@ class Allocator:
         while interval < 1:
             depth += 1
             interval, equal = p.interval_between(q, depth)
+
+            if depth > MAX_DEPTH:
+                raise Exception("Cannot allocate beyond max depth.")
 
         step = min(BOUNDARY, randint(0, interval - 1) + 1)
 
