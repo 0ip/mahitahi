@@ -27,6 +27,7 @@ class Main(QMainWindow):
         self.patch_stack = []
         self.author = False
         self.known_authors = []
+        self.patch_set = []  # Contains patch set pulled from Editor widget's Doc object
 
         resp, ok = QInputDialog.getText(
             self, "Portal Setup", "Paste the Portal ID you received or enter nothing to create your own:"
@@ -73,6 +74,7 @@ class Main(QMainWindow):
         self.setCentralWidget(self.editor)
 
         self.editor.change_evt.connect(self.on_change)
+        self.editor.res_state_evt.connect(self.on_resp_state)
 
         self.client.loop_start()
 
@@ -129,12 +131,16 @@ class Main(QMainWindow):
                 "authors": self.known_authors
             }
 
-            print("Author deeds: Sending known authors...")
+            print("Main author procedure: Sending known authors...")
             self.client.publish(self.mqtt_name + "/authors/set", json.dumps(set_dict))
 
-            print("Author deeds: Sending known patches...")
-            for patch in self.patch_stack:
-                self.client.publish(self.mqtt_name + "/patch", patch, qos=2)
+            print("Main author procedure: Sending known patches...")
+
+            for patch in self.patch_set:
+                payload = self.fernet.encrypt(patch.encode())
+                self.client.publish(self.mqtt_name + "/patch", payload, qos=2)
+
+            print("Main author procedure: Done")
 
     def on_topic_patch(self, topic, payload):
         if payload not in self.patch_stack:
@@ -167,6 +173,10 @@ class Main(QMainWindow):
                 self.author = True
                 self.update_title()
 
+    @pyqtSlot(str)
+    def on_resp_state(self, patch_set):
+        self.patch_set = json.loads(patch_set)
+
     def closeEvent(self, event):
         self.client.publish(self.mqtt_name + "/authors/leave", self.site)
         event.accept()
@@ -175,6 +185,7 @@ class Main(QMainWindow):
 class Editor(QTextEdit):
     upd_text = pyqtSignal(str)  # in
     change_evt = pyqtSignal(str)  # out
+    res_state_evt = pyqtSignal(str)  # out
 
     def __init__(self, site):
         self.view = QPlainTextEdit.__init__(self)
@@ -233,6 +244,8 @@ class Editor(QTextEdit):
 
             patch = self.doc.insert(sel_start, e.text())
             self.change_evt.emit(patch)
+
+        self.res_state_evt.emit(json.dumps(self.doc.patch_set))
 
         QTextEdit.keyPressEvent(self, e)
 

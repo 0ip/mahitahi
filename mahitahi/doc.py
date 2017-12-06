@@ -94,4 +94,4 @@ class Doc:
 
     @property
     def patch_set(self) -> List[str]:
-        return [self._serialize(self.PATCH_INSERT_TOKEN, c) for c in self._doc]
+        return [self._serialize(self.PATCH_INSERT_TOKEN, c) for c in self._doc[1:-1]]
