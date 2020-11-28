@@ -9,6 +9,8 @@
     </a>
 </div>
 
+_WARNING: this repo is not maintained anymore_
+
 _Status: WIP/Proof of concept_
 
 This library relies on the ideas presentend in [Logoot](https://doi.org/10.1109%2FTPDS.2009.173) and [LSEQ](https://doi.org/10.1145%2F2494266.2494278).
@@ -61,7 +63,7 @@ assert b_doc.text == "AxB\n"
 
 ![Screenshot](https://raw.githubusercontent.com/0ip/mahitahi/assets/screenshot.png)
 
-Starting `examples/mqtt_gui.py` prompts the user for a "Portal ID". This ID contains the MQTT host, the pad name and the encryption token. It is intented to share this ID with someone you want to edit this pad with, without the need to manually enter these connection details. 
+Starting `examples/mqtt_gui.py` prompts the user for a "Portal ID". This ID contains the MQTT host, the pad name and the encryption token. It is intented to share this ID with someone you want to edit this pad with, without the need to manually enter these connection details.
 
 #### Running tests
 

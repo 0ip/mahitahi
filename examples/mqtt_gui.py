@@ -19,7 +19,7 @@ from mahitahi import Doc
 
 class Main(QMainWindow):
 
-    HOST = "iot.eclipse.org"
+    HOST = "mqtt.eclipse.org"
 
     def __init__(self, parent=None):
         QMainWindow.__init__(self, parent)
